@@ -874,7 +874,7 @@ input[type=file]{font-size:14px;max-width:100%}
 <div class="app">
   <header class="top">
     <div>
-      <div class="eyebrow">Tour de Corse Historique · 6–10 octobre 2026</div>
+      <div class="eyebrow">Tour de Corse Historique · 6–10 octobre 2026 · v7</div>
       <h1>Météo des spéciales</h1>
     </div>
     <button id="btnRefresh" class="icon-btn" type="button" aria-label="Actualiser la météo">
@@ -977,8 +977,8 @@ input[type=file]{font-size:14px;max-width:100%}
     </div>
   </details>
 
-  <p class="foot"><b>Sources.</b> Prévisions Open-Meteo : AROME (Météo-France, 1,3 km) et ICON-EU, pas de 15 minutes. Radar RainViewer (images des 60 dernières minutes, déplacement des pluies mesuré puis prolongé jusqu’à 1 h 15). « Route humide » = pluie dans les 45 minutes précédentes. Une prévision de pluie très locale peut se décaler de quelques kilomètres ou de quelques minutes : regarde aussi le ciel et le radar.</p>
-  <p class="foot" id="ver"><b>Version 6</b> · mise à jour du 2 octobre 2026</p>
+  <p class="foot"><b>Sources.</b> Prévisions Open-Meteo : AROME (Météo-France, 1,3 km) et ICON-EU, pas de 15 minutes. Radar RainViewer (images des 2 dernières heures, déplacement des pluies mesuré puis prolongé jusqu’à 1 h 15). « Route humide » = pluie dans les 45 minutes précédentes. Une prévision de pluie très locale peut se décaler de quelques kilomètres ou de quelques minutes : regarde aussi le ciel et le radar.</p>
+  <p class="foot" id="ver"><b>Version 7</b> · mise à jour du 2 octobre 2026</p>
 </div>
 
 <script>
@@ -1295,7 +1295,7 @@ function renderVerdict(st,an){
     }).join('')+'</div>'+
     '<dl class="ends"><dt>Départ</dt><dd>'+hm(first.t*1000)+' · '+cellWord(first.c)+(first.p?' · '+change(first.p,first.idx):'')+'</dd>'+
     '<dt>Arrivée</dt><dd>'+hm(last.t*1000)+' · '+cellWord(last.c)+(last.p?' · '+change(last.p,last.idx):'')+'</dd>'+
-    '<dt>Source</dt><dd>'+(usesRadar?'Radar (observé puis extrapolé) et modèles':(R.ok?'Modèles seulement (le radar couvre la dernière heure et la prochaine heure et quart)':'Modèles seulement (radar non chargé'+(R.err?' : '+String(R.err).replace(/</g,'&lt;'):'')+')'))+'</dd>'+
+    '<dt>Source</dt><dd>'+(usesRadar?'Radar (observé puis extrapolé) et modèles':(R.ok?'Modèles seulement (hors de la fenêtre du radar : 2 h passées, 1 h 15 à venir)':'Modèles seulement (radar non chargé'+(R.err?' : '+String(R.err).replace(/</g,'&lt;'):'')+')'))+'</dd>'+
     '<dt>Fiabilité</dt><dd>'+(dis?(usesRadar?'Le radar et les modèles divergent sur une partie du parcours (cases hachurées).':'Les modèles divergent sur une partie du parcours (cases hachurées).'):(nmod>1?(usesRadar?'Radar et modèles concordent.':'Les modèles sont d\u2019accord.'):'Une seule source disponible sur ce créneau.'))+'</dd></dl></div>';
   var v=$('verdict');v.className='verdict t'+tone;v.innerHTML=html;
 }
@@ -1568,7 +1568,9 @@ async function loadRadarInner(){
         frames.push({time:f.time,field:R.cache[f.path]});
       }catch(e){failed=e;}
     });
-    Object.keys(R.cache).forEach(function(k){if(!use.some(function(f){return f.path===k;}))delete R.cache[k];});
+    var older=past.slice(-13,-7);
+    Object.keys(R.cache).forEach(function(k){if(!past.slice(-13).some(function(f){return f.path===k;}))delete R.cache[k];});
+    older.forEach(function(f){if(R.cache[f.path])frames.push({time:f.time,field:R.cache[f.path]});});
     frames.sort(function(a,b){return a.time-b.time;});
     if(frames.length<3){
       var msg=failed&&failed.name==='TypeError'?'le navigateur ne peut pas lire les images radar':'images radar manquantes ('+frames.length+'/7'+(failed&&failed.message?', '+failed.message:'')+')';
@@ -1580,11 +1582,24 @@ async function loadRadarInner(){
     var a2=toGrid(43.1,8.5),b2=toGrid(41.3,9.7),c=0;
     for(var y=Math.max(0,Math.floor(a2[1]));y<Math.min(GH,Math.ceil(b2[1]));y++)for(var x=Math.max(0,Math.floor(a2[0]));x<Math.min(GW,Math.ceil(b2[0]));x++)if(last.field[y*GW+x]>0)c++;
     R.echo=c;R.ok=true;R.err=null;RO.cvs={};radarRetry=0;
+    var missing=older.filter(function(f){return !R.cache[f.path];});
+    if(missing.length)loadOlder(host,missing);
   }catch(e){
     R.ok=false;R.err=(e&&e.message)||'erreur inconnue';
     if(e&&e.name==='AbortError')R.err='délai dépassé';
     else if(e&&e.name==='TypeError'&&!/lire/.test(R.err))R.err='pas de réseau';
   }
+}
+/* Images plus anciennes (jusqu'à 2 h en arrière) chargées en arrière-plan, pour voir la pluie d'une spéciale déjà passée */
+async function loadOlder(host,list){
+  var added=0;
+  await pool(list,2,async function(f){
+    try{
+      if(!R.cache[f.path])R.cache[f.path]=await loadFrame(host,f.path);
+      if(!R.frames.some(function(x){return x.time===f.time;})){R.frames.push({time:f.time,field:R.cache[f.path]});added++;}
+    }catch(e){}
+  });
+  if(added){R.frames.sort(function(a,b){return a.time-b.time;});R.nf=R.frames.length;RO.cvs={};afterRadar();}
 }
 /* Après un chargement radar hors du cycle normal (nouvel essai, bouton Radar) : recalculer et réafficher */
 function afterRadar(){
