@@ -1222,6 +1222,7 @@ async function refresh(){
   S.err=null;
   await Promise.all([loadDay(S.day),loadRadar()]);
   attachAll();
+  if(!R.ok)scheduleRadarRetry();
   if(S.radar&&R.ok){RO.items=radarItems();$('rSlider').max=String(RO.items.length-1);var ob=RO.items.filter(function(x){return !x.fc;}).length;if(!RO.timer)showRadarFrame(ob-1);}
   S.loading=false;$('btnRefresh').classList.remove('spin');
   renderAll();
@@ -1293,7 +1294,7 @@ function renderVerdict(st,an){
     }).join('')+'</div>'+
     '<dl class="ends"><dt>Départ</dt><dd>'+hm(first.t*1000)+' · '+cellWord(first.c)+(first.p?' · '+change(first.p,first.idx):'')+'</dd>'+
     '<dt>Arrivée</dt><dd>'+hm(last.t*1000)+' · '+cellWord(last.c)+(last.p?' · '+change(last.p,last.idx):'')+'</dd>'+
-    '<dt>Source</dt><dd>'+(usesRadar?'Radar (observé puis extrapolé) et modèles':'Modèles seulement (hors de portée du radar)')+'</dd>'+
+    '<dt>Source</dt><dd>'+(usesRadar?'Radar (observé puis extrapolé) et modèles':(R.ok?'Modèles seulement (le radar couvre la dernière heure et la prochaine heure et quart)':'Modèles seulement (radar non chargé'+(R.err?' : '+String(R.err).replace(/</g,'&lt;'):'')+')'))+'</dd>'+
     '<dt>Fiabilité</dt><dd>'+(dis?(usesRadar?'Le radar et les modèles divergent sur une partie du parcours (cases hachurées).':'Les modèles divergent sur une partie du parcours (cases hachurées).'):(nmod>1?(usesRadar?'Radar et modèles concordent.':'Les modèles sont d\u2019accord.'):'Une seule source disponible sur ce créneau.'))+'</dd></dl></div>';
   var v=$('verdict');v.className='verdict t'+tone;v.innerHTML=html;
 }
@@ -1419,26 +1420,39 @@ function toGrid(lat,lon){
   var s=Math.sin(lat*RAD);
   return [((lon+180)/360*RZ-RX0)*256,((0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*RZ-RY0)*256];
 }
-var R={ok:false,err:null,frames:[],vx:0,vy:0,motionOk:false,spd:0,dir:'',echo:0,cache:{}};
+var R={ok:false,err:null,frames:[],nf:0,vx:0,vy:0,motionOk:false,spd:0,dir:'',echo:0,cache:{}};
 var RO={layer:null,items:[],idx:0,timer:null,cvs:{},fallback:null};
 
-/* Intensité estimée depuis la couleur de la tuile : plus c'est sombre, plus la pluie est forte (approximatif). */
+/* Intensité estimée depuis la couleur de la tuile (palette non documentée : volontairement prudente).
+   Clair = faible, bleu soutenu = modérée, rouge/magenta = forte. */
 function pxRate(r,g,b,a){
   if(a<30)return 0;
-  if(r>b+40)return 6;
+  if(r>b+60&&r>150)return 6;
   var Y=0.299*r+0.587*g+0.114*b;
-  return Y>=150?0.6:Y>=85?2.5:6;
+  return Y>=140?0.6:2.5;
 }
+function pause(ms){return new Promise(function(r){setTimeout(r,ms);});}
 async function fetchTileBitmap(host,path,x,y){
-  var sizes=[512,256],last=new Error('tuile');
-  for(var i=0;i<sizes.length;i++){
+  var last=new Error('tuile');
+  for(var a=0;a<3;a++){
     try{
-      var resp=await fetchT(host+path+'/'+sizes[i]+'/7/'+x+'/'+y+'/2/0_0.png',15000);
-      if(!resp.ok){last=new Error('HTTP '+resp.status);continue;}
-      return await createImageBitmap(await resp.blob());
+      var resp=await fetchT(host+path+'/512/7/'+x+'/'+y+'/2/0_0.png',25000);
+      if(resp.ok)return await createImageBitmap(await resp.blob());
+      last=new Error('HTTP '+resp.status);
+      if(resp.status===400||resp.status===404){
+        resp=await fetchT(host+path+'/256/7/'+x+'/'+y+'/2/0_0.png',25000);
+        if(resp.ok)return await createImageBitmap(await resp.blob());
+      }
     }catch(e){last=e;}
+    await pause(1200*(a+1));
   }
   throw last;
+}
+async function pool(items,limit,fn){
+  var i=0;
+  async function worker(){while(i<items.length){var k=i++;await fn(items[k]);}}
+  var ws=[];for(var w=0;w<Math.min(limit,items.length);w++)ws.push(worker());
+  await Promise.all(ws);
 }
 async function loadFrame(host,path){
   var bms=await Promise.all([fetchTileBitmap(host,path,RX0,RY0),fetchTileBitmap(host,path,RX0+1,RY0)]);
@@ -1530,47 +1544,69 @@ function attachRadar(day){
 }
 function attachAll(){Object.keys(S.data).forEach(function(d){attachRadar(+d);});}
 
-async function loadRadar(){
+var radarBusy=null,radarRetry=0,radarRetryTimer=null;
+function loadRadar(){
+  if(radarBusy)return radarBusy;
+  radarBusy=loadRadarInner().then(function(){radarBusy=null;},function(){radarBusy=null;});
+  return radarBusy;
+}
+async function loadRadarInner(){
   try{
-    var r=await fetchT('https://api.rainviewer.com/public/weather-maps.json',10000);
-    var j=await r.json(),past=(j.radar&&j.radar.past)||[];
+    var j=null,lastE=null;
+    for(var a=0;a<2&&!j;a++){
+      try{var r=await fetchT('https://api.rainviewer.com/public/weather-maps.json',12000);if(!r.ok)throw new Error('HTTP '+r.status);j=await r.json();}
+      catch(e){lastE=e;await pause(1500);}
+    }
+    if(!j)throw lastE||new Error('liste des images radar inaccessible');
+    var past=(j.radar&&j.radar.past)||[];
     if(!past.length)throw new Error('aucune image radar publiée');
     var use=past.slice(-7),host=j.host,frames=[],failed=null;
-    await Promise.all(use.map(async function(f){
+    await pool(use,3,async function(f){
       try{
         if(!R.cache[f.path])R.cache[f.path]=await loadFrame(host,f.path);
         frames.push({time:f.time,field:R.cache[f.path]});
       }catch(e){failed=e;}
-    }));
+    });
     Object.keys(R.cache).forEach(function(k){if(!use.some(function(f){return f.path===k;}))delete R.cache[k];});
     frames.sort(function(a,b){return a.time-b.time;});
     if(frames.length<3){
-      var msg=failed&&failed.name==='TypeError'?'le navigateur ne peut pas lire les images radar':'images radar manquantes';
+      var msg=failed&&failed.name==='TypeError'?'le navigateur ne peut pas lire les images radar':'images radar manquantes ('+frames.length+'/7'+(failed&&failed.message?', '+failed.message:'')+')';
       throw new Error(msg);
     }
     var last=frames[frames.length-1];
     if(Date.now()/1000-last.time>45*60)throw new Error('dernière image trop ancienne ('+hm(last.time*1000)+')');
-    R.frames=frames;computeMotion();
-    var a=toGrid(43.1,8.5),b=toGrid(41.3,9.7),c=0;
-    for(var y=Math.max(0,Math.floor(a[1]));y<Math.min(GH,Math.ceil(b[1]));y++)for(var x=Math.max(0,Math.floor(a[0]));x<Math.min(GW,Math.ceil(b[0]));x++)if(last.field[y*GW+x]>0)c++;
-    R.echo=c;R.ok=true;R.err=null;RO.cvs={};
+    R.frames=frames;R.nf=frames.length;computeMotion();
+    var a2=toGrid(43.1,8.5),b2=toGrid(41.3,9.7),c=0;
+    for(var y=Math.max(0,Math.floor(a2[1]));y<Math.min(GH,Math.ceil(b2[1]));y++)for(var x=Math.max(0,Math.floor(a2[0]));x<Math.min(GW,Math.ceil(b2[0]));x++)if(last.field[y*GW+x]>0)c++;
+    R.echo=c;R.ok=true;R.err=null;RO.cvs={};radarRetry=0;
   }catch(e){
     R.ok=false;R.err=(e&&e.message)||'erreur inconnue';
     if(e&&e.name==='AbortError')R.err='délai dépassé';
     else if(e&&e.name==='TypeError'&&!/lire/.test(R.err))R.err='pas de réseau';
   }
 }
+/* Après un chargement radar hors du cycle normal (nouvel essai, bouton Radar) : recalculer et réafficher */
+function afterRadar(){
+  attachAll();
+  if(S.radar&&R.ok&&map){RO.items=radarItems();$('rSlider').max=String(RO.items.length-1);if(!RO.timer){var ob=RO.items.filter(function(x){return !x.fc;}).length;showRadarFrame(ob-1);}}
+  renderRadarStatus();renderChips();renderDetail();
+}
+function scheduleRadarRetry(){
+  if(R.ok||radarRetry>=4||radarRetryTimer)return;
+  radarRetry++;
+  radarRetryTimer=setTimeout(async function(){radarRetryTimer=null;await loadRadar();afterRadar();if(!R.ok)scheduleRadarRetry();},15000);
+}
 function renderRadarStatus(){
   var el=$('radarStatus');
-  if(S.loading&&!R.ok&&!R.err){el.className='status';el.innerHTML='';return;}
+  if((S.loading||radarBusy)&&!R.ok){el.className='status';el.innerHTML='<span class="dot"></span><span>Chargement du radar…</span>';return;}
   if(R.ok){
     var last=R.frames[R.frames.length-1],age=Math.max(0,Math.round((Date.now()/1000-last.time)/60));
     var mv=R.echo===0&&!R.motionOk?'aucune pluie détectée près de la Corse':R.motionOk?'pluies vers '+R.dir+' à '+R.spd+' km/h':'déplacement des pluies non mesurable, prévision radar prudente';
     el.className='status ok';
-    el.innerHTML='<span class="dot"></span><span>Radar : image de '+hm(last.time*1000)+' (il y a '+age+' min) · '+mv+'</span>';
+    el.innerHTML='<span class="dot"></span><span>Radar : image de '+hm(last.time*1000)+' (il y a '+age+' min) · '+mv+(R.nf<7?' · '+R.nf+'/7 images chargées':'')+'</span>';
   }else if(R.err){
     el.className='status err';
-    el.innerHTML='<span class="dot"></span><span>Radar indisponible, modèles seulement</span><span class="why"></span>';
+    el.innerHTML='<span class="dot"></span><span>Radar non chargé, modèles seulement'+(radarRetryTimer?' · nouvel essai en cours…':'')+'</span><span class="why"></span>';
     el.querySelector('.why').textContent=R.err;
   }else{el.className='status';el.innerHTML='';}
 }
@@ -1627,7 +1663,7 @@ async function toggleRadar(){
   var btn=$('btnRadar');
   if(S.radar){S.radar=false;btn.setAttribute('aria-pressed','false');radarOff();return;}
   S.radar=true;btn.setAttribute('aria-pressed','true');
-  if(!R.ok)await loadRadar();
+  if(!R.ok){await loadRadar();afterRadar();}
   renderRadarStatus();
   if(R.ok){
     RO.items=radarItems();
