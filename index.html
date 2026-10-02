@@ -793,6 +793,20 @@ h1{margin:2px 0 0;font:700 34px/0.95 var(--f-display);text-transform:uppercase;l
 .ends dt{font-weight:700;color:var(--muted);font-size:12px;letter-spacing:.06em;text-transform:uppercase;padding-top:2px}
 .ends dd{margin:0}
 
+.share{display:flex;flex-direction:column;gap:8px}
+.share .sbar{display:flex;height:22px;border-radius:7px;overflow:hidden;background:var(--cu)}
+.share .sbar i{display:block;height:100%;min-width:3px}
+.share ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:6px 12px;font-size:14px}
+.share li{display:flex;align-items:center;gap:7px;min-width:0;white-space:nowrap}
+.share li i{flex:none;width:14px;height:14px;border-radius:4px}
+.share li b{font-weight:700}
+.share li small{color:var(--muted);font-size:12px;margin-left:auto;white-space:nowrap}
+.share .sn{font-size:12px;color:var(--muted);margin:0}
+.notice{border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:14px;background:var(--surface-2);border:1px solid var(--line);border-left:6px solid var(--c1)}
+.notice.test{border-left-color:var(--accent)}
+.notice p{margin:0}
+.notice b{font-weight:700}
+.notice .btn{align-self:flex-start}
 .timebox{display:flex;flex-direction:column;gap:8px}
 .time-row{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .time-big{font:700 48px/0.9 var(--f-display)}
@@ -874,7 +888,7 @@ input[type=file]{font-size:14px;max-width:100%}
 <div class="app">
   <header class="top">
     <div>
-      <div class="eyebrow">Tour de Corse Historique · 6–10 octobre 2026 · v7</div>
+      <div class="eyebrow">Tour de Corse Historique · 6–10 octobre 2026 · v8</div>
       <h1>Météo des spéciales</h1>
     </div>
     <button id="btnRefresh" class="icon-btn" type="button" aria-label="Actualiser la météo">
@@ -895,6 +909,7 @@ input[type=file]{font-size:14px;max-width:100%}
       <p id="dMeta" class="detail-meta"></p>
     </div>
 
+    <div id="notice" class="notice" hidden></div>
     <div id="verdict" class="verdict"></div>
 
     <div class="timebox">
@@ -978,7 +993,7 @@ input[type=file]{font-size:14px;max-width:100%}
   </details>
 
   <p class="foot"><b>Sources.</b> Prévisions Open-Meteo : AROME (Météo-France, 1,3 km) et ICON-EU, pas de 15 minutes. Radar RainViewer (images des 2 dernières heures, déplacement des pluies mesuré puis prolongé jusqu’à 1 h 15). « Route humide » = pluie dans les 45 minutes précédentes. Une prévision de pluie très locale peut se décaler de quelques kilomètres ou de quelques minutes : regarde aussi le ciel et le radar.</p>
-  <p class="foot" id="ver"><b>Version 7</b> · mise à jour du 2 octobre 2026</p>
+  <p class="foot" id="ver"><b>Version 8</b> · mise à jour du 2 octobre 2026</p>
 </div>
 
 <script>
@@ -1097,7 +1112,14 @@ var stagesOfDay=function(d){return STAGES.filter(function(s){return s.d===d;});}
 var durS=function(st){return st.km/S.speed*3600;};
 
 /* ---------- Lecture des séries météo ---------- */
-function series(st,i){var D=S.data[st.d];return D?D.pts[D.base[st.n]+i]:null;}
+function series(st,i){
+  if(S.sim&&S.sim.n===st.n)return S.sim.rec?S.sim.rec.pts[i]:null;
+  var D=S.data[st.d];return D?D.pts[D.base[st.n]+i]:null;
+}
+var ymdFmt=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:TZ});
+var ymdOf=function(ms){return ymdFmt.format(ms);};
+var isSim=function(st){return !!(S.sim&&S.sim.n===st.n);};
+var stageIsToday=function(st){return ymdOf(Date.now())===YM+'-'+pad(st.d);};
 function slotIndex(p,tSec){return Math.ceil((tSec-p.t0)/SLOT-1e-6);}
 function amountAt(p,idx){
   if(idx<0||idx>=p.len)return null;
@@ -1217,14 +1239,54 @@ async function loadDay(day){
   else S.err=lastErr;
   return false;
 }
+/* Mode test : la spéciale est calculée comme si elle partait maintenant, avec la météo d'aujourd'hui (pour comparer au radar) */
+async function loadSim(){
+  var sim=S.sim;if(!sim)return false;
+  var st=stageByN(sim.n),smp=geo(st).samples;
+  var lat=smp.map(function(p){return p.lat.toFixed(3);}).join(','),lon=smp.map(function(p){return p.lon.toFixed(3);}).join(',');
+  var d0=ymdOf(Date.now()-86400e3),d1=ymdOf(Date.now()+86400e3);
+  var q='latitude='+lat+'&longitude='+lon+'&minutely_15=precipitation&timezone=Europe%2FParis&timeformat=unixtime&start_date='+d0+'&end_date='+d1;
+  var tries=[q+'&models=meteofrance_arome_france_hd,icon_eu',q];
+  var lastErr='Erreur inconnue';
+  for(var a=0;a<tries.length;a++){
+    var r,j;
+    try{r=await fetchT(API+tries[a],15000);}
+    catch(e){lastErr=e&&e.name==='AbortError'?'Délai dépassé (réseau trop lent)':'Pas de réseau';break;}
+    try{j=await r.json();}catch(e){j=null;}
+    if(!r.ok){lastErr=(j&&j.reason)||('Erreur HTTP '+r.status);continue;}
+    var arr=Array.isArray(j)?j:[j];
+    if(arr.length!==smp.length||!arr[0]||!arr[0].minutely_15){lastErr='Réponse inattendue du service météo';continue;}
+    var pts=arr.map(function(loc){
+      var m=loc.minutely_15,models={};
+      Object.keys(m).forEach(function(k){if(k.indexOf('precipitation')===0)models[k==='precipitation'?'modèle':k.slice(14)]=m[k];});
+      return {t0:m.time[0],len:m.time.length,models:models,order:orderModels(Object.keys(models))};
+    });
+    if(S.sim===sim){sim.rec={fetchedAt:Date.now(),pts:pts};sim.err=null;}
+    return true;
+  }
+  if(S.sim===sim)sim.err=lastErr;
+  return false;
+}
+async function startSim(){
+  var st=stageByN(S.n);
+  S.sim={n:st.n,rec:null,err:null};
+  S.T0=Math.round(Date.now()/60000)*60000;
+  setupTime(false);renderAll();
+  await Promise.all([loadSim(),loadRadar()]);
+  attachAll();
+  if(!R.ok)scheduleRadarRetry();
+  renderAll();
+}
+function exitSim(){S.sim=null;}
+
 async function refresh(){
   if(S.loading)return;
   S.loading=true;$('btnRefresh').classList.add('spin');renderStatus();
   S.err=null;
-  await Promise.all([loadDay(S.day),loadRadar()]);
+  await Promise.all([loadDay(S.day),loadRadar(),S.sim?loadSim():0]);
   attachAll();
   if(!R.ok)scheduleRadarRetry();
-  if(S.radar&&R.ok){RO.items=radarItems();$('rSlider').max=String(RO.items.length-1);var ob=RO.items.filter(function(x){return !x.fc;}).length;if(!RO.timer)showRadarFrame(ob-1);}
+  if(S.radar&&R.ok){RO.items=radarItems();$('rSlider').max=String(RO.items.length-1);if(!RO.timer)showRadarFrame(radarStartIdx());}
   S.loading=false;$('btnRefresh').classList.remove('spin');
   renderAll();
 }
@@ -1253,7 +1315,7 @@ function offsetMin(day){return (S.rank+((day===7||day===8)?S.before:0))*S.intv;}
 function estMs(st){return officialMs(st)+Math.round(offsetMin(st.d)*60000);}
 function manualMs(st){var v=S.manual[st.n];return v?Date.parse(YM+'-'+pad(st.d)+'T'+v+':00+02:00'):null;}
 function stageOfficialT0(st){return manualMs(st)||estMs(st);}
-function setManual(n,ms){S.manual[n]=hm(ms);store.set('tdc.manual',S.manual);}
+function setManual(n,ms){if(S.sim&&S.sim.n===n)return;S.manual[n]=hm(ms);store.set('tdc.manual',S.manual);}
 function clearManual(n){delete S.manual[n];store.set('tdc.manual',S.manual);}
 function renderChips(){
   var box=$('chips'),sl=box.scrollLeft;
@@ -1276,20 +1338,65 @@ function renderChips(){
 
 /* ---------- Rendu : détail ---------- */
 var map=null,mapLayer=null,radarLayer=null,lastFitN=null;
+var SH_LAB={'0':'Sec','1':'Route humide','2':'Pluie faible','3':'Pluie modérée','4':'Pluie forte','-1':'Sans données'};
+var SH_VAR={'0':'--c0','1':'--c1','2':'--c2','3':'--c3','4':'--c4','-1':'--cu'};
+/* Part de la spéciale (en distance) dans chaque état : chaque point de mesure représente le tronçon qui l'entoure. */
+function shares(st,an){
+  var km={},n=an.rows.length;
+  an.rows.forEach(function(r,i){
+    var a=i===0?0:(an.rows[i-1].s.f+r.s.f)/2,b=i===n-1?1:(r.s.f+an.rows[i+1].s.f)/2;
+    km[r.c.cls]=(km[r.c.cls]||0)+(b-a)*st.km;
+  });
+  var list=[0,1,2,3,4,-1].filter(function(c){return km[c]>0.0001;}).map(function(c){
+    return {cls:c,km:km[c],raw:km[c]/st.km*100,pct:Math.floor(km[c]/st.km*100)};
+  });
+  /* arrondi « plus grand reste » pour que le total fasse 100 % */
+  var left=100-list.reduce(function(a,x){return a+x.pct;},0);
+  list.slice().sort(function(a,b){return (b.raw-b.pct)-(a.raw-a.pct);}).forEach(function(x){if(left>0){x.pct++;left--;}});
+  var byCls={};list.forEach(function(x){byCls[x.cls]=x;});
+  return {list:list,byCls:byCls,n:n};
+}
+function shareHtml(st,an,sh){
+  var bar=sh.list.map(function(x){return '<i style="width:'+x.raw.toFixed(2)+'%;background:var('+SH_VAR[x.cls]+')"></i>';}).join('');
+  var li=sh.list.map(function(x){
+    return '<li><i style="background:var('+SH_VAR[x.cls]+')"></i><b>'+SH_LAB[x.cls]+'</b>&nbsp;'+(x.pct===0?'&lt;&nbsp;1':x.pct)+'&nbsp;%<small>'+fmtKm(x.km)+'</small></li>';
+  }).join('');
+  return '<div class="share"><div class="sbar" role="img" aria-label="Répartition de la spéciale">'+bar+'</div><ul>'+li+'</ul>'+
+    '<p class="sn">Part de la distance, estimée sur '+sh.n+' points répartis le long de la spéciale.</p></div>';
+}
+function renderNotice(st,an){
+  var el=$('notice'),t0=S.T0,dur=durS(st);
+  if(isSim(st)){
+    var sim=S.sim,m=sim.err?' Météo du jour indisponible : '+String(sim.err).replace(/</g,'&lt;')+'.':!sim.rec?' Chargement…':'';
+    el.className='notice test';
+    el.innerHTML='<p><b>Mode test : départ simulé aujourd’hui à '+hm(t0)+'.</b> Ce n’est pas la prévision du '+st.d+' octobre : on applique la météo et le radar du moment à cette spéciale, pour vérifier que le tableau suit bien le radar.'+m+'</p>'+
+      '<button class="btn" type="button" data-act="simOff">Revenir à la prévision du '+st.d+' octobre</button>';
+    el.hidden=false;return;
+  }
+  if(R.ok&&!radarCovers(t0,dur)){
+    var far=t0/1000>R.frames[R.frames.length-1].time+75*60;
+    el.className='notice';
+    el.innerHTML='<p><b>Le radar ne sert pas pour ce départ ('+rel(t0)+').</b> Il ne voit que les 2 h passées et 1 h 15 à venir. Ici le tableau vient uniquement des modèles (AROME, ICON-EU)'+(far?'. La pluie affichée sur la carte radar est celle d’aujourd’hui, pas celle de ta spéciale':'')+'.</p>'+
+      (stageIsToday(st)?'':'<button class="btn" type="button" data-act="simOn">Tester avec la pluie d’aujourd’hui</button>');
+    el.hidden=false;return;
+  }
+  el.hidden=true;el.innerHTML='';
+}
 function renderVerdict(st,an){
   var tone=an.worst<0?'u':an.worst;
-  var total=st.km,share={sec:0,humide:0,pluie:0,'?':0};
-  an.runs.forEach(function(r){share[r.g]+=(r.to-r.from)/total*100;});
-  var shareTxt=[];
-  if(share.pluie>=1)shareTxt.push('pluie sur '+Math.round(share.pluie)+' % du parcours');
-  if(share.humide>=1)shareTxt.push('humide '+Math.round(share.humide)+' %');
-  if(share.sec>=1)shareTxt.push('sec '+Math.round(share.sec)+' %');
+  var sh=shares(st,an),shareTxt=[];
+  var pc=function(c){return sh.byCls[c]?sh.byCls[c].pct:0;};
+  var rain=pc(2)+pc(3)+pc(4);
+  shareTxt.push('pluie sur '+rain+' % du parcours');
+  shareTxt.push('route humide '+pc(1)+' %');
+  shareTxt.push('sec '+pc(0)+' %');
+  if(pc(-1))shareTxt.push('sans données '+pc(-1)+' %');
   var first=an.rows[0],last=an.rows[an.rows.length-1];
   var dis=an.rows.some(function(r){return r.c.dis;});
   var usesRadar=an.rows.some(function(r){return r.c.src==='radar';});
   var nmod=an.rows.reduce(function(m,r){return Math.max(m,Object.keys(r.c.per||{}).length);},0);
   var html='<div class="v-head"><h3>'+headline(an.runs)+'</h3><p>'+(shareTxt.join(' · ')||'—')+'</p></div>'+
-    '<div class="v-body"><div class="runs">'+an.runs.map(function(r){
+    '<div class="v-body">'+shareHtml(st,an,sh)+'<div class="runs">'+an.runs.map(function(r){
       var cl=r.g==='pluie'?'r'+r.max:r.g==='sec'?'r0':r.g==='humide'?'r1':'ru';
       return '<span class="run '+cl+'"><b>km '+Math.round(r.from)+'–'+Math.round(r.to)+'</b>'+runLabel(r)+'</span>';
     }).join('')+'</div>'+
@@ -1362,6 +1469,7 @@ function renderMap(st,an){
 }
 function renderNote(st){
   var man=manualMs(st);
+  if(isSim(st)){$('tNote').innerHTML='<b>Mode test.</b> Départ simulé aujourd’hui, avec la météo et le radar du moment. L’heure saisie ici n’est pas enregistrée.';return;}
   $('tNote').innerHTML=man
     ?'<b>Heure saisie par toi.</b> Estimation : '+hm(estMs(st))+'.'
     :'Estimée : 1ʳᵉ voiture '+st.t+' + '+Math.round(offsetMin(st.d))+' min'+((st.d===7||st.d===8)?' (dont '+Math.round(S.before*S.intv)+' pour les légendes et VHRS)':'')+'.';
@@ -1377,17 +1485,20 @@ function renderDetail(){
   if(document.activeElement!==$('tInput'))$('tInput').value=hm(S.T0);
   renderNote(st);
 
+  renderNotice(st,an);
   renderVerdict(st,an);
   renderMatrix(st,an);
   renderMap(st,an);
+  if(S.radar&&R.ok&&RO.items.length&&!RO.timer&&RO.syncT0!==S.T0){RO.syncT0=S.T0;showRadarFrame(radarStartIdx());}
 }
 function setupTime(reset){
-  var st=stageByN(S.n),off=stageOfficialT0(st),now=Date.now();
+  var st=stageByN(S.n),now=Date.now(),sim=isSim(st),off=sim?Math.round(now/60000)*60000:stageOfficialT0(st);
   var lo=Math.min(now,off)-3600e3,hi=Math.max(now,off)+3*3600e3;
-  if(hi-lo>14*3600e3){lo=off-3*3600e3;hi=off+3*3600e3;}
+  if(sim){lo=now-2*3600e3;hi=now+3*3600e3;}
+  else if(hi-lo>14*3600e3){lo=off-3*3600e3;hi=off+3*3600e3;}
   var sl=$('tSlider');
   sl.min=String(Math.floor(lo/300e3)*5);sl.max=String(Math.ceil(hi/300e3)*5);
-  $('tNow').hidden=!(now>=lo&&now<=hi);
+  $('tNow').textContent=stageIsToday(st)?'Maintenant':'Tester avec aujourd’hui';
   if(reset||!S.T0)S.T0=off;
   S.T0=Math.min(Math.max(S.T0,lo),hi);
 }
@@ -1395,10 +1506,10 @@ function renderAll(){
   renderStatus();renderRadarStatus();renderDays();renderChips();renderDetail();
 }
 function selectStage(n,keepTime){
-  S.n=n;S.T0=0;setupTime(true);renderChips();renderDetail();
+  exitSim();S.n=n;S.T0=0;setupTime(true);renderChips();renderDetail();
 }
 function selectDay(d){
-  S.day=d;S.err=null;
+  exitSim();S.day=d;S.err=null;
   var sts=stagesOfDay(d),now=Date.now();
   var pick=sts.filter(function(s){return stageOfficialT0(s)+durS(s)*1000+15*60e3>now;})[0]||sts[0];
   S.n=pick.n;S.T0=0;setupTime(true);
@@ -1530,11 +1641,13 @@ function radarRateAt(g,t){
 }
 function attachRadar(day){
   var D=S.data[day];if(!D)return;
-  var ds=daySamples(day);
+  attachRec(D,daySamples(day).pts);
+}
+function attachRec(D,smp){
   D.pts.forEach(function(p,i){
     delete p.models.radar;p.order=p.order.filter(function(m){return m!=='radar';});
-    if(!R.ok||!ds.pts[i])return;
-    var g=toGrid(ds.pts[i].lat,ds.pts[i].lon),arr=new Array(p.len),any=false;
+    if(!R.ok||!smp[i])return;
+    var g=toGrid(smp[i].lat,smp[i].lon),arr=new Array(p.len),any=false;
     for(var k=0;k<p.len;k++){
       var ts=p.t0+k*SLOT,sum=0,cnt=0;
       [750,450,150].forEach(function(off){var v=radarRateAt(g,ts-off);if(v!=null){sum+=v;cnt++;}});
@@ -1543,7 +1656,25 @@ function attachRadar(day){
     if(any){p.models.radar=arr;p.order.unshift('radar');}
   });
 }
-function attachAll(){Object.keys(S.data).forEach(function(d){attachRadar(+d);});}
+function attachAll(){
+  Object.keys(S.data).forEach(function(d){attachRadar(+d);});
+  if(S.sim&&S.sim.rec)attachRec(S.sim.rec,geo(stageByN(S.sim.n)).samples);
+}
+/* Le radar couvre-t-il le passage de la voiture ? (2 h passées, 1 h 15 à venir) */
+function radarCovers(T0,durSec){
+  if(!R.ok)return false;
+  var a=T0/1000,b=a+durSec,first=R.frames[0].time,last=R.frames[R.frames.length-1].time;
+  return a<=last+75*60&&b>=first-360;
+}
+/* Image radar à montrer sur la carte : celle qui correspond à l'heure de départ si elle est dans la fenêtre, sinon la dernière observée */
+function radarStartIdx(){
+  var it=RO.items,obs=it.filter(function(x){return !x.fc;}).length,st=stageByN(S.n);
+  if(!R.ok||!it.length)return 0;
+  if(!radarCovers(S.T0,durS(st)))return Math.max(0,obs-1);
+  var t=S.T0/1000,best=0;
+  for(var i=0;i<it.length;i++)if(Math.abs(it[i].time-t)<Math.abs(it[best].time-t))best=i;
+  return best;
+}
 
 var radarBusy=null,radarRetry=0,radarRetryTimer=null;
 function loadRadar(){
@@ -1604,7 +1735,7 @@ async function loadOlder(host,list){
 /* Après un chargement radar hors du cycle normal (nouvel essai, bouton Radar) : recalculer et réafficher */
 function afterRadar(){
   attachAll();
-  if(S.radar&&R.ok&&map){RO.items=radarItems();$('rSlider').max=String(RO.items.length-1);if(!RO.timer){var ob=RO.items.filter(function(x){return !x.fc;}).length;showRadarFrame(ob-1);}}
+  if(S.radar&&R.ok&&map){RO.items=radarItems();$('rSlider').max=String(RO.items.length-1);if(!RO.timer)showRadarFrame(radarStartIdx());}
   renderRadarStatus();renderChips();renderDetail();
 }
 function scheduleRadarRetry(){
@@ -1660,7 +1791,8 @@ function showRadarFrame(i){
   else RO.layer.setUrl(url);
   $('rSlider').value=String(i);
   var last=R.frames[R.frames.length-1];
-  $('radarInfo').textContent=hm(it.time*1000)+(it.fc?' · prévision +'+it.lead+' min':(it.time===last.time?' · dernière image':' · observé'));
+  var st=stageByN(S.n),away=!radarCovers(S.T0,durS(st));
+  $('radarInfo').textContent=hm(it.time*1000)+(it.fc?' · prévision +'+it.lead+' min':(it.time===last.time?' · dernière image':' · observé'))+(away?' · pluie d’aujourd’hui, pas à l’heure de départ':'');
 }
 function stopRadarPlay(){if(RO.timer){clearInterval(RO.timer);RO.timer=null;}$('rPlay').setAttribute('aria-label','Lecture');$('rPlay').classList.remove('on');}
 function toggleRadarPlay(){
@@ -1684,8 +1816,7 @@ async function toggleRadar(){
   if(R.ok){
     RO.items=radarItems();
     var sl=$('rSlider');sl.min='0';sl.max=String(RO.items.length-1);sl.hidden=false;$('rPlay').hidden=false;
-    var obs=RO.items.filter(function(x){return !x.fc;}).length;
-    showRadarFrame(obs-1);
+    showRadarFrame(radarStartIdx());
   }else{
     /* repli : affichage simple des tuiles RainViewer, sans prévision */
     try{
@@ -1753,14 +1884,23 @@ async function importFiles(files){
 $('days').addEventListener('click',function(e){var b=e.target.closest('.day');if(b)selectDay(+b.dataset.d);});
 $('chips').addEventListener('click',function(e){var b=e.target.closest('.chip');if(b)selectStage(+b.dataset.n);});
 $('btnRefresh').addEventListener('click',refresh);
-$('tSlider').addEventListener('input',function(){S.T0=(+this.value)*60000;setManual(S.n,S.T0);$('tBig').textContent=hm(S.T0);$('tSub').textContent=rel(S.T0);renderChips();var st=stageByN(S.n),an=analyze(st,S.T0);renderNote(st);renderVerdict(st,an);renderMatrix(st,an);renderMap(st,an);});
+$('tSlider').addEventListener('input',function(){S.T0=(+this.value)*60000;setManual(S.n,S.T0);$('tBig').textContent=hm(S.T0);$('tSub').textContent=rel(S.T0);renderChips();var st=stageByN(S.n),an=analyze(st,S.T0);renderNote(st);renderNotice(st,an);renderVerdict(st,an);renderMatrix(st,an);renderMap(st,an);if(S.radar&&R.ok&&RO.items.length&&!RO.timer){RO.syncT0=S.T0;showRadarFrame(radarStartIdx());}});
 function nudge(m){S.T0+=m*60000;var sl=$('tSlider');S.T0=Math.min(Math.max(S.T0,(+sl.min)*60000),(+sl.max)*60000);setManual(S.n,S.T0);renderChips();renderDetail();}
 $('tMinus').addEventListener('click',function(){nudge(-5);});
 $('tPlus').addEventListener('click',function(){nudge(5);});
-$('tOfficial').addEventListener('click',function(){clearManual(S.n);S.T0=0;setupTime(true);renderChips();renderDetail();});
-$('tNow').addEventListener('click',function(){S.T0=Math.round(Date.now()/60000)*60000;setManual(S.n,S.T0);renderChips();renderDetail();});
+$('tOfficial').addEventListener('click',function(){exitSim();clearManual(S.n);S.T0=0;setupTime(true);renderChips();renderDetail();});
+$('tNow').addEventListener('click',function(){
+  var st=stageByN(S.n);
+  if(!stageIsToday(st)){startSim();return;}
+  exitSim();S.T0=Math.round(Date.now()/60000)*60000;setManual(S.n,S.T0);setupTime(false);renderChips();renderDetail();
+});
 $('mx').addEventListener('click',function(e){var td=e.target.closest('td');if(td)showReadout(td);});
 $('mx').addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target.matches('td')){e.preventDefault();showReadout(e.target);}});
+$('notice').addEventListener('click',function(e){
+  var b=e.target.closest('button');if(!b)return;
+  if(b.dataset.act==='simOn')startSim();
+  else if(b.dataset.act==='simOff'){exitSim();S.T0=0;setupTime(true);renderChips();renderDetail();}
+});
 $('btnRadar').addEventListener('click',toggleRadar);
 $('rPlay').addEventListener('click',toggleRadarPlay);
 $('rSlider').addEventListener('input',function(){stopRadarPlay();showRadarFrame(+this.value);});
@@ -1785,7 +1925,7 @@ offInfo();
 $('inSpeed').addEventListener('change',function(){S.speed=Math.max(30,Math.min(120,+this.value||65));this.value=S.speed;store.set('tdc.speed',S.speed);renderChips();renderDetail();});
 $('tInput').addEventListener('change',function(){
   var m=this.value.match(/^(\d{1,2}):(\d{2})$/);if(!m)return;
-  var st=stageByN(S.n),ms=Date.parse(YM+'-'+pad(st.d)+'T'+pad(+m[1])+':'+m[2]+':00+02:00');
+  var st=stageByN(S.n),ms=Date.parse((isSim(st)?ymdOf(Date.now()):YM+'-'+pad(st.d))+'T'+pad(+m[1])+':'+m[2]+':00+02:00');
   S.T0=ms;setManual(S.n,ms);setupTime(false);renderChips();renderDetail();
 });
 $('inFile').addEventListener('change',function(){if(this.files&&this.files.length)importFiles(this.files);this.value='';});
