@@ -815,6 +815,8 @@ h1{margin:0;font:italic 800 clamp(22px,6.4vw,26px)/1.05 var(--f-head);color:var(
 /* ---------- Liste des spéciales ---------- */
 .railhead{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin:16px 0 8px;font-size:13.5px;color:var(--muted)}
 .railhead b{color:var(--ink);font-weight:600}
+.railhead .rdate{display:block;font-weight:700}
+.railhead .rroute{display:block;font-weight:400;color:var(--text)}
 .rail{position:relative;display:flex;gap:8px;overflow-x:auto;align-items:flex-end;scroll-snap-type:x proximity;margin:0 -16px;padding:2px 16px 8px;scroll-padding-inline:16px;-webkit-overflow-scrolling:touch}
 .chip{flex:0 0 148px;scroll-snap-align:start;text-align:left;border:1px solid var(--line);background:var(--bg);padding:9px 10px 10px;display:flex;flex-direction:column;gap:5px;min-width:0;border-radius:2px;color:var(--text)}
 .chip[aria-pressed="true"]{background:var(--sub);border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink),inset 0 4px 0 var(--red)}
@@ -1037,6 +1039,8 @@ p.warn{margin:0;border-left:4px solid var(--red);padding:5px 0 5px 12px;font-siz
 .empty{border:1px dashed var(--line);padding:18px 16px;display:flex;flex-direction:column;align-items:flex-start;gap:10px;font-size:14px}
 .empty p{margin:0}
 .fine{margin:0;font-size:12.5px;color:var(--muted);line-height:1.5}
+.fine.dayline{color:var(--text)}
+.grid thead th.corner{color:var(--ink)}
 
 /* ---------- Carte ---------- */
 #map{height:min(64vh,440px);min-height:300px;border:1px solid var(--line);background:var(--sub)}
@@ -1220,7 +1224,6 @@ input[type=file]{font-size:14px;max-width:100%}
     <section class="pane" id="paneCarte" role="tabpanel" aria-labelledby="tabCarte" hidden>
       <div id="map" role="img" aria-label="Carte de la spéciale colorée selon la pluie"></div>
       <div class="map-tools">
-        <button id="btnRadar" class="btn" type="button" aria-pressed="false">Radar de pluie</button>
         <button id="rPlay" class="btn icon" type="button" aria-label="Lecture" hidden>
           <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5z" fill="currentColor"/></svg>
           <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4.5h4.5v15H6zM13.5 4.5H18v15h-4.5z" fill="currentColor"/></svg>
@@ -1304,7 +1307,7 @@ input[type=file]{font-size:14px;max-width:100%}
 <footer class="pband">
   <div class="pband-in">
     <img src="data:image/png;base64,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" width="188" height="19" alt="Porsche">
-    <span id="ver"><b>Version 13</b><br>2 octobre 2026</span>
+    <span id="ver"><b>Version 13.1</b><br>3 octobre 2026</span>
   </div>
 </footer>
 
@@ -1322,12 +1325,17 @@ input[type=file]{font-size:14px;max-width:100%}
 /* ---------- Données de l'épreuve ---------- */
 var TZ='Europe/Paris', SLOT=900, YM='2026-10';
 var DAYS=[
-  {d:6,  lab:'Mar', sub:'Étape 1', route:'Étape 1 : Calvi / Calvi',        a:'calvi',     b:'calvi'},
-  {d:7,  lab:'Mer', sub:'Étape 2', route:'Étape 2 : Calvi / Lucciana',     a:'calvi',     b:'lucciana'},
-  {d:8,  lab:'Jeu', sub:'Étape 3', route:'Étape 3 : Lucciana / Propriano', a:'lucciana',  b:'propriano'},
-  {d:9,  lab:'Ven', sub:'Étape 4', route:'Étape 4 : Propriano / Ajaccio',  a:'propriano', b:'ajaccio'},
-  {d:10, lab:'Sam', sub:'Étape 5', route:'Étape 5 : Ajaccio / Calvi',      a:'ajaccio',   b:'calvi'}
+  {d:6,  lab:'Mar', full:'Mardi 6 octobre',     sub:'Étape 1', route:'Étape 1 : Calvi / Calvi',        a:'calvi',     b:'calvi'},
+  {d:7,  lab:'Mer', full:'Mercredi 7 octobre',  sub:'Étape 2', route:'Étape 2 : Calvi / Lucciana',     a:'calvi',     b:'lucciana'},
+  {d:8,  lab:'Jeu', full:'Jeudi 8 octobre',     sub:'Étape 3', route:'Étape 3 : Lucciana / Propriano', a:'lucciana',  b:'propriano'},
+  {d:9,  lab:'Ven', full:'Vendredi 9 octobre',  sub:'Étape 4', route:'Étape 4 : Propriano / Ajaccio',  a:'propriano', b:'ajaccio'},
+  {d:10, lab:'Sam', full:'Samedi 10 octobre',   sub:'Étape 5', route:'Étape 5 : Ajaccio / Calvi',      a:'ajaccio',   b:'calvi'}
 ];
+var dayOf=function(n){return DAYS.filter(function(x){return x.d===n;})[0]||null;};
+var dayLong=function(n){var x=dayOf(n);return x?x.full:'';};
+var dayShort=function(n){var x=dayOf(n);return x?x.lab+' '+x.d:'';};
+/* Coin haut gauche des tableaux : le jour (ou « Test » en mode test), pour savoir de quelle journée on lit les heures */
+var cornerHtml=function(what,n,test){return '<th class="corner"><span class="sr">'+what+', </span>'+(test?'Test':esc(dayShort(n)))+'</th>';};
 /* Parcs d'assistance (position approximative : centre de la ville). a = parc de départ de l'étape, b = parc d'arrivée. */
 var PARKS=[
   {id:'calvi',    name:'Calvi',     lat:42.5675, lon:8.7570},
@@ -1430,7 +1438,7 @@ var S={
   back:BACKS.indexOf(+store.get('tdc.back',45))>=0?+store.get('tdc.back',45):45,
   routes:cleanRoutes(store.get('tdc.routes',{})), theme:store.get('tdc.theme','auto'), tab:store.get('tdc.tab','pluie'),
   worst:store.get('tdc.worst',true)!==false,
-  data:{}, temp:{}, tbusy:false, err:null, loading:false, radar:false, sel:null,
+  data:{}, temp:{}, tbusy:false, err:null, loading:false, sel:null,
   parks:{rain:null,wx:null,busy:false,err:null}, mem:{parks:{rain:0,wx:0}}, memFull:false, all:{busy:false,msg:'',done:0,total:0,result:'',fail:false}
 };
 if(TABS.indexOf(S.tab)<0)S.tab='pluie';
@@ -2132,7 +2140,8 @@ function renderDays(){
       return '<button class="day" role="tab" type="button" data-d="'+d.d+'" aria-selected="'+(d.d===S.day)+'" tabindex="'+(d.d===S.day?0:-1)+'"><b>'+d.lab+' '+d.d+'</b><small>'+d.sub+'</small></button>';
     }).join('');
   });
-  $('routeLine').textContent=DAYS.filter(function(d){return d.d===S.day;})[0].route;
+  var cd=dayOf(S.day);
+  $('routeLine').innerHTML='<span class="rdate">'+esc(cd.full)+'</span><span class="rroute">'+esc(cd.route)+'</span>';
   $('railCount').textContent=stagesOfDay(S.day).length+' spéciales';
 }
 /* Départ estimé = 1re voiture VHC + rang × intervalle (+ légendes/VHRS partis avant en étapes 2 et 3) */
@@ -2406,7 +2415,7 @@ function renderVerdict(st,an){
 function renderMatrix(st,an,fromStart){
   var t0=S.T0/1000,dur=durS(st),nowS=Date.now()/1000;
   var first=Math.floor((t0-S.back*60)/SLOT)*SLOT,n=Math.ceil((dur+(S.back+90)*60)/SLOT)+1;
-  var h='<thead><tr><th><span class="sr">Point</span></th>';
+  var h='<thead><tr>'+cornerHtml('Point',st.d,isSim(st));
   for(var k=0;k<n;k++){var ts=first+k*SLOT;h+='<th class="'+(nowS>ts-SLOT&&nowS<=ts?'now':'')+'">'+hm(ts*1000)+'</th>';}
   h+='</tr></thead><tbody>';
   an.rows.forEach(function(r){
@@ -2467,6 +2476,7 @@ function renderMap(st,an){
     lastFitN=key;
     map.fitBounds(L.latLngBounds(g.line),{padding:[34,34],maxZoom:13});
   }
+  radarSync();
   setTimeout(function(){if(map)map.invalidateSize();},60);
 }
 
@@ -2551,7 +2561,7 @@ function renderSol(st,an){
   if(L&&L.lvl>=1&&!isSim(st))warn+='<p class="warn"><b>'+esc(L.act)+'</b> '+esc(L.msg)+'</p>';
   /* tableau */
   var nowS=Date.now()/1000,cols=M.cols;
-  var h='<thead><tr><th><span class="sr">Ligne</span></th>';
+  var h='<thead><tr>'+cornerHtml('Ligne',st.d,isSim(st));
   cols.forEach(function(c){h+='<th class="'+(Math.abs(nowS-c)<1800?'now':'')+'">'+hm(c*1000)+'</th>';});
   h+='</tr></thead><tbody>';
   /* ciel */
@@ -2627,7 +2637,8 @@ function renderSol(st,an){
   var fresh=D.fetchedAt?'Données de '+hm(D.fetchedAt)+'. ':'';
   var stale=D.err?'<p class="fine"><b>Données mémorisées :</b> '+esc(D.err)+'.</p>':'';
   var miss=(!M.hasGust||!M.hasCape)?'<p class="fine">'+(!M.hasGust&&!M.hasCape?'Rafales et orages : non fournis':!M.hasGust?'Rafales : non fournies':'Orages : non fournis')+' par le service météo pour l’instant.</p>':'';
-  box.innerHTML=
+  var dayLine='<p class="fine dayline">'+(isSim(st)?'<b>Mode test</b> : météo d’aujourd’hui, pas la prévision du '+esc(dayLong(st.d).toLowerCase())+'.':'<b>'+esc(dayLong(st.d))+'</b> · ES '+st.n+', départ à '+hm(S.T0)+'.')+'</p>';
+  box.innerHTML=dayLine+
     '<div class="solsum">'+sumSoil+sumAir+sumSky+sumGust+sumStorm+sumLight+'</div>'+warn+
     '<div class="gridwrap"><table id="sx" class="grid">'+h+'</table></div>'+
     '<p id="sRead" class="readout">Touche une case pour voir le détail.</p>'+legend+stale+miss+
@@ -2711,7 +2722,7 @@ function renderDetail(){
   renderNotice(st,an);
   renderVerdict(st,an);
   renderPane();
-  if(S.radar&&R.ok&&RO.items.length&&!RO.timer&&RO.syncT0!==S.T0){RO.syncT0=S.T0;showRadarFrame(radarStartIdx());}
+  if(map&&R.ok&&RO.items.length&&!RO.timer&&RO.syncT0!==S.T0){RO.syncT0=S.T0;showRadarFrame(radarStartIdx());}
 }
 function setupTime(reset){
   var st=stageByN(S.n),now=Date.now(),sim=isSim(st),off=sim?Math.round(now/60000)*60000:stageOfficialT0(st);
@@ -2813,7 +2824,7 @@ function parkSection(pk,cols,nowS,seen){
   var kmax=hv.reduce(function(m,x){return x.cape!=null&&x.cape>m?x.cape:m;},-1),hasCape=kmax>=KB[0];
   if(hasGust)seen.gust=true;
   if(hasCape)seen.cape=true;
-  var th='<thead><tr><th><span class="sr">Ligne</span></th>'+cols.map(function(H){return '<th class="'+(nowS>=H&&nowS<H+3600?'now':'')+'">'+hm(H*1000)+'</th>';}).join('')+'</tr></thead><tbody>';
+  var th='<thead><tr>'+cornerHtml('Ligne',S.day,false)+cols.map(function(H){return '<th class="'+(nowS>=H&&nowS<H+3600?'now':'')+'">'+hm(H*1000)+'</th>';}).join('')+'</tr></thead><tbody>';
   var row=function(label,sub,fn){
     var r='<tr><th scope="row">'+label+'<small>'+sub+'</small></th>';
     hv.forEach(function(x,c){r+=fn(x,c);});
@@ -2861,7 +2872,7 @@ function renderParks(){
   var keep=lastParkDay===S.day,old=box.querySelector('.gridwrap'),sl=old?old.scrollLeft:0;
   var cols=parkCols(),nowS=Date.now()/1000,d=DAYS.filter(function(x){return x.d===S.day;})[0];
   var seen={gust:false,cape:false};
-  var h='<p class="fine">'+esc(d.route)+'. Les parcs de l’étape sont en premier.</p>'+parkOrder().map(function(pk){return parkSection(pk,cols,nowS,seen);}).join('');
+  var h='<p class="fine dayline"><b>'+esc(d.full)+'</b> · '+esc(d.route)+'. Les parcs de l’étape sont en premier.</p>'+parkOrder().map(function(pk){return parkSection(pk,cols,nowS,seen);}).join('');
   var when=[];
   if(P.rain)when.push('pluie de '+hm(P.rain.fetchedAt)+' ('+ageTxt(P.rain.fetchedAt)+')');
   if(P.wx)when.push('température, vent et orage de '+hm(P.wx.fetchedAt));
@@ -2920,7 +2931,7 @@ function toGrid(lat,lon){
   return [((lon+180)/360*RZ-RX0)*256,((0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*RZ-RY0)*256];
 }
 var R={ok:false,err:null,frames:[],nf:0,vx:0,vy:0,motionOk:false,spd:0,dir:'',echo:0,cache:{}};
-var RO={layer:null,items:[],idx:0,timer:null,cvs:{},fallback:null};
+var RO={layer:null,items:[],idx:0,timer:null,cvs:{},fallback:null,ver:''};
 
 /* Intensité estimée depuis la couleur de la tuile (palette non documentée : volontairement prudente).
    Clair = faible, bleu soutenu = modérée, rouge/magenta = forte. */
@@ -3124,10 +3135,10 @@ async function loadOlder(host,list){
   });
   if(added){R.frames.sort(function(a,b){return a.time-b.time;});R.nf=R.frames.length;RO.cvs={};afterRadar();}
 }
-/* Après un chargement radar hors du cycle normal (nouvel essai, bouton Radar) : recalculer et réafficher */
+/* Après un chargement radar hors du cycle normal (nouvel essai) : recalculer et réafficher */
 function afterRadar(){
   attachAll();
-  if(S.radar&&R.ok&&map){RO.items=radarItems();$('rSlider').max=String(RO.items.length-1);if(!RO.timer)showRadarFrame(radarStartIdx());}
+  radarSync();
   renderRadarStatus();renderChips();renderDetail();
 }
 function scheduleRadarRetry(){
@@ -3189,31 +3200,41 @@ function toggleRadarPlay(){
   $('rPlay').setAttribute('aria-label','Pause');$('rPlay').classList.add('on');
   RO.timer=setInterval(function(){showRadarFrame(RO.idx+1>=RO.items.length?0:RO.idx+1);},650);
 }
-function radarOff(){
-  stopRadarPlay();
-  if(RO.layer){map.removeLayer(RO.layer);RO.layer=null;}
-  if(RO.fallback){map.removeLayer(RO.fallback);RO.fallback=null;}
-  $('rPlay').hidden=true;$('rSlider').hidden=true;$('radarInfo').textContent='';
-}
-async function toggleRadar(){
-  ensureMap();if(!map)return;
-  var btn=$('btnRadar');
-  if(S.radar){S.radar=false;btn.setAttribute('aria-pressed','false');radarOff();return;}
-  S.radar=true;btn.setAttribute('aria-pressed','true');
-  if(!R.ok){await loadRadar();afterRadar();}
-  renderRadarStatus();
+/* Radar sur la carte : toujours affiché, il n'y a plus de bouton. radarSync() est appelée à chaque affichage de la carte et après chaque
+   chargement du radar. Elle ne fait rien si l'image affichée est déjà à jour (on ne ramène pas le curseur que tu viens de déplacer),
+   et elle attend l'onglet Carte : une carte cachée n'a pas de taille, on la met à jour à l'ouverture. */
+function radarVer(){return R.ok?R.frames[R.frames.length-1].time+':'+R.nf:'';}
+function radarSync(){
+  if(!map||S.tab!=='carte')return;
+  var sl=$('rSlider'),pl=$('rPlay'),info=$('radarInfo'),ver=radarVer();
   if(R.ok){
+    if(RO.ver===ver&&RO.layer)return;
+    RO.ver=ver;
+    if(RO.fallback){map.removeLayer(RO.fallback);RO.fallback=null;}
     RO.items=radarItems();
-    var sl=$('rSlider');sl.min='0';sl.max=String(RO.items.length-1);sl.hidden=false;$('rPlay').hidden=false;
-    showRadarFrame(radarStartIdx());
-  }else{
-    /* repli : affichage simple des tuiles RainViewer, sans prévision */
-    try{
-      var r=await fetchT('https://api.rainviewer.com/public/weather-maps.json',10000),j=await r.json(),fr=j.radar.past,last=fr[fr.length-1];
-      RO.fallback=L.tileLayer(j.host+last.path+'/512/{z}/{x}/{y}/2/1_0.png',{pane:'radar',opacity:.75,tileSize:512,zoomOffset:-1,maxNativeZoom:8,maxZoom:18}).addTo(map);
-      $('radarInfo').textContent='Image radar de '+hm(last.time*1000)+' (affichage seul, sans prévision)';
-    }catch(e){$('radarInfo').textContent='Radar indisponible pour le moment.';S.radar=false;btn.setAttribute('aria-pressed','false');}
+    sl.min='0';sl.max=String(RO.items.length-1);sl.hidden=false;pl.hidden=false;
+    if(!RO.timer){RO.syncT0=S.T0;showRadarFrame(radarStartIdx());}
+    return;
   }
+  if(RO.layer)return;                    /* une image est déjà affichée : on la garde jusqu'au prochain chargement réussi */
+  sl.hidden=true;pl.hidden=true;
+  if(RO.fallback)return;                 /* le repli est déjà affiché avec son texte : on n'y touche pas */
+  if(radarBusy||!R.err){info.textContent='Chargement du radar…';return;}   /* en cours, ou pas encore tenté (démarrage) */
+  radarFallback();                       /* le chargement complet a échoué : on tente l'affichage simple */
+}
+/* Repli quand le radar complet n'a pas pu être chargé : simples images RainViewer, sans prévision (un seul essai à la fois) */
+var fbBusy=false;
+async function radarFallback(){
+  if(fbBusy||RO.fallback||!map)return;
+  fbBusy=true;
+  try{
+    var r=await fetchT('https://api.rainviewer.com/public/weather-maps.json',10000),j=await r.json(),fr=j.radar.past,last=fr[fr.length-1];
+    if(R.ok||!map)return;
+    RO.fallback=L.tileLayer(j.host+last.path+'/512/{z}/{x}/{y}/2/1_0.png',{pane:'radar',opacity:.75,tileSize:512,zoomOffset:-1,maxNativeZoom:8,maxZoom:18}).addTo(map);
+    $('radarInfo').textContent='Image radar de '+hm(last.time*1000)+' (affichage seul, sans prévision)';
+  }catch(e){
+    if(!R.ok&&!RO.layer&&!RO.fallback)$('radarInfo').textContent='Radar indisponible pour le moment.';
+  }finally{fbBusy=false;}
 }
 
 
@@ -3437,7 +3458,7 @@ $('tSlider').addEventListener('input',function(){
   renderChips();
   var st=stageByN(S.n),an=analyze(st,S.T0);
   renderNote(st);renderPairBox(st);renderNotice(st,an);renderVerdict(st,an);renderPane();
-  if(S.radar&&R.ok&&RO.items.length&&!RO.timer){RO.syncT0=S.T0;showRadarFrame(radarStartIdx());}
+  if(map&&R.ok&&RO.items.length&&!RO.timer){RO.syncT0=S.T0;showRadarFrame(radarStartIdx());}
 });
 $('tOfficial').addEventListener('click',function(){exitSim();clearManual(S.n);S.T0=0;setupTime(true);renderChips();renderDetail();});
 $('tNow').addEventListener('click',function(){
@@ -3503,7 +3524,6 @@ Array.prototype.forEach.call(document.querySelectorAll('.tab'),function(b){
     e.preventDefault();setTab(order[j],true);
   });
 });
-$('btnRadar').addEventListener('click',toggleRadar);
 $('rPlay').addEventListener('click',toggleRadarPlay);
 $('rSlider').addEventListener('input',function(){stopRadarPlay();showRadarFrame(+this.value);});
 $('btnFlip').addEventListener('click',function(){
